@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>User Login + Private Message Board</title>
+  <style>
+    :root {
+      --bg:#0f1724; --card:#0b1220; --accent:#06b6d4; --muted:#9aa7b2;
+      --success:#16a34a; --danger:#ef4444;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+    }
+    *{box-sizing:border-box}
+    body{margin:0; min-height:100vh; background:linear-gradient(180deg,#031022,#071226);
+      color:#e6f0f3; display:flex; align-items:center; justify-content:center; padding:24px}
+    .container{width:100%; max-width:800px; background:rgba(255,255,255,0.02);
+      border-radius:12px; padding:20px; box-shadow:0 10px 30px rgba(2,6,23,0.6);}
+    .card{background:var(--card); padding:20px; border-radius:10px;
+      box-shadow:0 4px 14px rgba(2,6,23,0.45);}
+    h1{margin:0 0 12px; font-size:18px; letter-spacing:0.2px}
+    label{display:block; font-size:13px; color:var(--muted); margin-bottom:6px}
+    input, textarea{width:100%; padding:10px 12px; border-radius:8px;
+      border:1px solid rgba(255,255,255,0.05); background:rgba(255,255,255,0.05); color:inherit;}
+    input:focus, textarea:focus{outline:none; border-color:var(--accent);
+      box-shadow:0 0 0 2px rgba(6,182,212,0.3);}
+    button{background:var(--accent); color:#022; padding:10px 12px; border-radius:8px;
+      border:none; cursor:pointer; font-weight:600; margin-top:8px}
+    .logout{background:transparent; color:var(--muted); border:1px solid rgba(255,255,255,0.1);}
+    .status{font-size:13px; padding:8px; border-radius:8px; margin-bottom:12px}
+    .status.ok{background:rgba(22,163,74,0.1); color:var(--success);}
+    .status.err{background:rgba(239,68,68,0.1); color:var(--danger);}
+    .messages{margin-top:16px; max-height:40vh; overflow:auto; display:flex; flex-direction:column; gap:10px;}
+    .msg{background:rgba(255,255,255,0.03); padding:10px; border-radius:8px;}
+    .msg .meta{font-size:12px; color:var(--muted); margin-bottom:4px}
+    footer{text-align:center; margin-top:14px; font-size:12px; color:var(--muted);}
+    .settings{margin-top:16px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.1);}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Login -->
+    <div id="login-card" class="card">
+      <h1>Login</h1>
+      <div id="status" class="status" style="display:none"></div>
+      <label for="username">Username</label>
+      <input id="username" type="text" autocomplete="username">
+      <label for="password" style="margin-top:10px">Password</label>
+      <input id="password" type="password" autocomplete="current-password">
+      <button id="loginBtn">Log in</button>
+    </div>
+
+    <!-- Board -->
+    <div id="board-card" class="card" style="display:none">
+      <h1>Message Board</h1>
+      <div style="margin-bottom:10px">
+        Logged in as <strong id="who"></strong>
+        <button id="logoutBtn" class="logout" style="float:right">Logout</button>
+      </div>
+      <label for="message">Write a message</label>
+      <textarea id="message" rows="3" placeholder="Say something..."></textarea>
+      <button id="postBtn">Post</button>
+      <span id="msgResult" style="margin-left:10px; font-size:12px; color:var(--muted)"></span>
+      <div class="messages" id="messages"></div>
+
+      <!-- Settings -->
+      <div class="settings">
+        <h1>Account Settings</h1>
+        <label for="newUsername">New Username</label>
+        <input id="newUsername" type="text">
+        <label for="newPassword" style="margin-top:10px">New Password</label>
+        <input id="newPassword" type="password">
+        <button id="updateBtn">Update Account</button>
+        <span id="updateResult" style="margin-left:10px; font-size:12px; color:var(--muted)"></span>
+      </div>
+    </div>
+
+    <footer>Users and bins are managed from one central JSONBin.</footer>
+  </div>
+
+  <script>
+    // === CONFIG ===
+    const USERS_BIN_ID = "68c568a1ae596e708fed72a8"; // central bin with all users
+    const API_KEY = "$2a$10$ZZmri.xNpvu4cY6Iwt1z0ORO.UqK6oYspAWWzBVC0.zEBxRF3FAay";   // same for all requests
+    const LOGIN_KEY = "app_logged_in_user_v3";
+
+    // === DOM ===
+    const loginCard = document.getElementById("login-card");
+    const boardCard = document.getElementById("board-card");
+    const loginBtn = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const usernameInput = document.getElementById("username");
+    const passwordInput = document.getElementById("password");
+    const whoEl = document.getElementById("who");
+    const statusEl = document.getElementById("status");
+    const messageInput = document.getElementById("message");
+    const postBtn = document.getElementById("postBtn");
+    const msgResult = document.getElementById("msgResult");
+    const messagesEl = document.getElementById("messages");
+    const newUsernameInput = document.getElementById("newUsername");
+    const newPasswordInput = document.getElementById("newPassword");
+    const updateBtn = document.getElementById("updateBtn");
+    const updateResult = document.getElementById("updateResult");
+
+    // === Helpers ===
+    function showStatus(text, ok=true){
+      statusEl.style.display="block";
+      statusEl.textContent=text;
+      statusEl.className="status "+(ok?"ok":"err");
+    }
+    function hideStatus(){statusEl.style.display="none";}
+    function getLoggedUser(){ return JSON.parse(localStorage.getItem(LOGIN_KEY)); }
+    function setLoggedUser(u){ localStorage.setItem(LOGIN_KEY, JSON.stringify(u)); }
+    function clearLoggedUser(){ localStorage.removeItem(LOGIN_KEY); }
+    function escapeHtml(s){ return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+    function formatTs(ts){ return new Date(ts).toLocaleString(); }
+
+    // === JSONBin wrapper ===
+    async function fetchBin(binId){
+      const res = await fetch(`https://api.jsonbin.io/v3/b/${binId}`,{
+        headers:{ "X-Master-Key": API_KEY }
+      });
+      const j = await res.json();
+      return j.record;
+    }
+    async function updateBin(binId,data){
+      await fetch(`https://api.jsonbin.io/v3/b/${binId}`,{
+        method:"PUT",
+        headers:{ "X-Master-Key": API_KEY, "Content-Type":"application/json" },
+        body: JSON.stringify(data)
+      });
+    }
+
+    // === UI ===
+    async function renderBoard(binId, username){
+      const data = await fetchBin(binId);
+      messagesEl.innerHTML="";
+      [...data.messages].sort((a,b)=>b.ts-a.ts).forEach(m=>{
+        const div=document.createElement("div");
+        div.className="msg";
+        div.innerHTML=`<div class="meta"><b>${escapeHtml(m.author)}</b> · ${formatTs(m.ts)}</div>
+                       <div>${escapeHtml(m.text)}</div>`;
+        messagesEl.appendChild(div);
+      });
+    }
+
+    async function tryLogin(user, pass){
+      try{
+        const usersData = await fetchBin(USERS_BIN_ID);
+        const u = usersData.users.find(x=>x.username===user && x.password===pass);
+        if(!u){ showStatus("Invalid username or password", false); return; }
+        setLoggedUser({username:u.username, bin:u.bin});
+        whoEl.textContent=u.username;
+        loginCard.style.display="none";
+        boardCard.style.display="block";
+        hideStatus();
+        await renderBoard(u.bin,u.username);
+      }catch(err){ showStatus("Error: "+err.message, false); }
+    }
+
+    async function postMessage(user,binId,text){
+      if(!text.trim()){ msgResult.textContent="Enter message"; return; }
+      try{
+        const data = await fetchBin(binId);
+        data.messages.push({author:user,text,ts:Date.now()});
+        await updateBin(binId,data);
+        messageInput.value="";
+        msgResult.textContent="Posted";
+        await renderBoard(binId,user);
+      }catch(err){ msgResult.textContent="Error: "+err.message; }
+    }
+
+    async function updateAccount(oldUser,binId,newUser,newPass){
+      try{
+        const usersData = await fetchBin(USERS_BIN_ID);
+        const userRec = usersData.users.find(x=>x.username===oldUser);
+        if(newUser.trim()) userRec.username=newUser;
+        if(newPass.trim()) userRec.password=newPass;
+        await updateBin(USERS_BIN_ID,usersData);
+        updateResult.textContent="Updated!";
+        setLoggedUser({username:userRec.username, bin:binId});
+        whoEl.textContent=userRec.username;
+      }catch(err){ updateResult.textContent="Error: "+err.message; }
+    }
+
+    // === Events ===
+    loginBtn.onclick=()=> tryLogin(usernameInput.value.trim(), passwordInput.value);
+    logoutBtn.onclick=()=>{ clearLoggedUser(); boardCard.style.display="none"; loginCard.style.display="block"; };
+    postBtn.onclick=()=>{ const u=getLoggedUser(); if(u) postMessage(u.username,u.bin,messageInput.value); };
+    updateBtn.onclick=()=>{ const u=getLoggedUser(); if(u) updateAccount(u.username,u.bin,newUsernameInput.value,newPasswordInput.value); };
+
+    // === Init ===
+    (async ()=>{
+      const u=getLoggedUser();
+      if(u){ whoEl.textContent=u.username; loginCard.style.display="none"; boardCard.style.display="block"; await renderBoard(u.bin,u.username); }
+    })();
+  </script>
+</body>
+</html>
