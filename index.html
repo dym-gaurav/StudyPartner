@@ -940,11 +940,11 @@
         function loadDashboard() {
             // Set user info with DP image (using placeholder if missing)
             const currentDpFilename = `${currentUser.username}.jpg`;
-            userDp.src = `images/${currentDpFilename}`;
-            userDp.onerror = () => { userDp.src = 'images/default-dp.jpg'; };
+            userDp.src = `${currentDpFilename}`;
+            userDp.onerror = () => { userDp.src = 'default-dp.jpg'; };
             
-            currentUserDp.src = `images/${currentDpFilename}`;
-            currentUserDp.onerror = () => { currentUserDp.src = 'images/default-dp.jpg'; };
+            currentUserDp.src = `${currentDpFilename}`;
+            currentUserDp.onerror = () => { currentUserDp.src = 'default-dp.jpg'; };
             currentUserName.textContent = currentUserData.name || currentUser.username;
             userName.textContent = currentUserData.name || currentUser.username;
             
@@ -953,8 +953,8 @@
                 otherUserCard.style.display = 'block';
                 
                 const otherDpFilename = `${otherUser.username}.jpg`;
-                otherUserDp.src = `images/${otherDpFilename}`;
-                otherUserDp.onerror = () => { otherUserDp.src = 'images/default-dp.jpg'; };
+                otherUserDp.src = `${otherDpFilename}`;
+                otherUserDp.onerror = () => { otherUserDp.src = 'default-dp.jpg'; };
                 otherUserName.textContent = otherUserData.name || otherUser.username;
             } else {
                 otherUserCard.style.display = 'none';
